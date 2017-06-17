@@ -249,7 +249,7 @@ class TwitterSlicer(TwitterSearch):
 if __name__ == '__main__':
     log.basicConfig(level=log.INFO)
 
-    search_query = "Babylon 5"
+    search_query = 'babylon 5 near: '
     rate_delay_seconds = 0
     error_delay_seconds = 5
 
