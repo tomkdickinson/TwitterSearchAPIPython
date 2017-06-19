@@ -108,7 +108,9 @@ class TwitterSearch(metaclass=ABCMeta):
                 'user_name': None,
                 'created_at': None,
                 'retweets': 0,
-                'favorites': 0
+                'favorites': 0,
+                'geo_text': None,
+                'geo_search': None
             }
 
             # Tweet Text
