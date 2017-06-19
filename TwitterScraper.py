@@ -85,8 +85,7 @@ class TwitterSearch(metaclass=ABCMeta):
             sleep(self.error_delay)
             return self.execute_search(url)
 
-    @staticmethod
-    def parse_tweets(items_html):
+    def parse_tweets(self, items_html):
         """
         Parses Tweets from the given HTML
         :param items_html: The HTML block with tweets
@@ -125,6 +124,17 @@ class TwitterSearch(metaclass=ABCMeta):
                 tweet['user_screen_name'] = user_details_div['data-user-id']
                 tweet['user_name'] = user_details_div['data-name']
 
+            data = self.find_geo(tweet)
+
+            if data is not None:
+                geo_soup = BeautifulSoup()
+                geo_data = geo_soup.find('span',
+                                         class_='permalink-tweet-geo-text')
+                geo_text = geo_data.text
+                geo_text = geo_text.replace('\n', '').replace('from', '').strip()
+                tweet['geo_text'] = geo_text
+                tweet['geo_search'] = geo_data.select("a")[0]['href']
+
             # Tweet date
             date_span = li.find("span", class_="_timestamp")
             if date_span is not None:
@@ -142,6 +152,25 @@ class TwitterSearch(metaclass=ABCMeta):
 
             tweets.append(tweet)
         return tweets
+
+    def find_geo(tweet):
+        """
+        requests original tweet from page of tweets searched
+        """
+        try:
+            # Specify a user agent to prevent Twitter from returning a profile card
+            headers = {
+                'user-agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/46.0.2490.'
+                              '86 Safari/537.36'
+            }
+            url = "https://twitter.com/" + tweet['user_id'] + '/status/' + "tweet[tweet_id]"
+            req = requests.get(url, headers=headers)
+            # response = urllib2.urlopen(req)
+            data = json.loads(req.text)
+            return data
+
+        # If we get a ValueError exception due to a request timing out, we sleep for our error delay, then make
+        # another attempt
 
     @staticmethod
     def construct_url(query, max_position=None):
