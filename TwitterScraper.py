@@ -91,9 +91,11 @@ class TwitterSearch(metaclass=ABCMeta):
         :param items_html: The HTML block with tweets
         :return: A JSON list of tweets
         """
+        print("parse_tweets")
         soup = BeautifulSoup(items_html, "html.parser")
         tweets = []
         for li in soup.find_all("li", class_='js-stream-item'):
+            print("parse_tweets main for loop")
 
             # If our li doesn't have a tweet-id, we skip it as it's not going to be a tweet.
             if 'data-item-id' not in li.attrs:
@@ -117,6 +119,8 @@ class TwitterSearch(metaclass=ABCMeta):
             if text_p is not None:
                 tweet['text'] = text_p.get_text()
 
+            print(tweet['text'])
+
             # Tweet User ID, User Screen Name, User Name
             user_details_div = li.find("div", class_="tweet")
             if user_details_div is not None:
@@ -124,16 +128,32 @@ class TwitterSearch(metaclass=ABCMeta):
                 tweet['user_screen_name'] = user_details_div['data-user-id']
                 tweet['user_name'] = user_details_div['data-name']
 
-            data = self.find_geo(tweet)
+            try:
+            # Specify a user agent to prevent Twitter from returning a profile card
+                headers = {'user-agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/46.0.2490.86 Safari/537.36'}
+                url = 'https://twitter.com/' + tweet['user_id'] + '/status/' + tweet['tweet_id']
+                data = requests.get(url, headers=headers)
+            # response = urllib2.urlopen(req)
+            # data = json.loads(req.text)
+
+            # If  we get a ValueError exception due to a request timing out, we sleep for our error delay, then make
+            # another attempt
+            except Exception as e:
+                print(e)
+
+            # data = self.find_geo(tweet)
 
             if data is not None:
-                geo_soup = BeautifulSoup()
-                geo_data = geo_soup.find('span',
-                                         class_='permalink-tweet-geo-text')
-                geo_text = geo_data.text
-                geo_text = geo_text.replace('\n', '').replace('from', '').strip()
-                tweet['geo_text'] = geo_text
-                tweet['geo_search'] = geo_data.select("a")[0]['href']
+                try:
+                    geo_soup = BeautifulSoup(data.text, 'html.parser')
+                    geo_data = geo_soup.find('span',
+                                             class_='permalink-tweet-geo-text')
+                    geo_text = geo_data.text
+                    geo_text = geo_text.replace('\n', '').replace('from', '').strip()
+                    tweet['geo_text'] = geo_text
+                    tweet['geo_search'] = geo_data.select("a")[0]['href']
+                except Exception as e:
+                    print(e)
 
             # Tweet date
             date_span = li.find("span", class_="_timestamp")
@@ -153,24 +173,28 @@ class TwitterSearch(metaclass=ABCMeta):
             tweets.append(tweet)
         return tweets
 
+    @staticmethod
     def find_geo(tweet):
         """
         requests original tweet from page of tweets searched
         """
+        print("find_geo")
         try:
             # Specify a user agent to prevent Twitter from returning a profile card
             headers = {
                 'user-agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/46.0.2490.'
                               '86 Safari/537.36'
             }
-            url = "https://twitter.com/" + tweet['user_id'] + '/status/' + "tweet[tweet_id]"
+            url = "https://twitter.com/" + tweet['user_id'] + '/status/' + tweet['tweet_id']
             req = requests.get(url, headers=headers)
             # response = urllib2.urlopen(req)
-            data = json.loads(req.text)
-            return data
+            # data = json.loads(req.text)
+            return req
 
         # If we get a ValueError exception due to a request timing out, we sleep for our error delay, then make
         # another attempt
+        except Exception as e:
+            print(e)
 
     @staticmethod
     def construct_url(query, max_position=None):
@@ -272,7 +296,7 @@ class TwitterSlicer(TwitterSearch):
             if tweet['created_at'] is not None:
                 t = datetime.datetime.fromtimestamp((tweet['created_at']/1000))
                 fmt = "%Y-%m-%d %H:%M:%S"
-                log.info("%i [%s] - %s/status/%s" % (self.counter, t.strftime(fmt), tweet['user_name'], tweet['tweet_id']))
+                log.info("%i [%s] - local:%s" % (self.counter, t.strftime(fmt), tweet['geo_text']))
 
         return True
 
@@ -281,7 +305,7 @@ if __name__ == '__main__':
     log.basicConfig(level=log.INFO)
 
     # format MUST BE <any search words/query>[space]near:["][location]["][space]within:[distance]mi
-    search_query = 'allergies OR sneezing near:"Kansas City, MO" within:1700mi'
+    search_query = 'allergies near:"Kansas City, MO" within:1700mi'
     rate_delay_seconds = 0
     error_delay_seconds = 5
 
