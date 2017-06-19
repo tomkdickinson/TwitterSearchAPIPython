@@ -91,11 +91,11 @@ class TwitterSearch(metaclass=ABCMeta):
         :param items_html: The HTML block with tweets
         :return: A JSON list of tweets
         """
-        print("parse_tweets")
+        # print("parse_tweets")
         soup = BeautifulSoup(items_html, "html.parser")
         tweets = []
         for li in soup.find_all("li", class_='js-stream-item'):
-            print("parse_tweets main for loop")
+            # print("parse_tweets main for loop")
 
             # If our li doesn't have a tweet-id, we skip it as it's not going to be a tweet.
             if 'data-item-id' not in li.attrs:
@@ -119,7 +119,7 @@ class TwitterSearch(metaclass=ABCMeta):
             if text_p is not None:
                 tweet['text'] = text_p.get_text()
 
-            print(tweet['text'])
+            # print(tweet['text'])
 
             # Tweet User ID, User Screen Name, User Name
             user_details_div = li.find("div", class_="tweet")
@@ -128,20 +128,7 @@ class TwitterSearch(metaclass=ABCMeta):
                 tweet['user_screen_name'] = user_details_div['data-user-id']
                 tweet['user_name'] = user_details_div['data-name']
 
-            try:
-            # Specify a user agent to prevent Twitter from returning a profile card
-                headers = {'user-agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/46.0.2490.86 Safari/537.36'}
-                url = 'https://twitter.com/' + tweet['user_id'] + '/status/' + tweet['tweet_id']
-                data = requests.get(url, headers=headers)
-            # response = urllib2.urlopen(req)
-            # data = json.loads(req.text)
-
-            # If  we get a ValueError exception due to a request timing out, we sleep for our error delay, then make
-            # another attempt
-            except Exception as e:
-                print(e)
-
-            # data = self.find_geo(tweet)
+            data = self.find_geo(tweet)
 
             if data is not None:
                 try:
@@ -178,7 +165,7 @@ class TwitterSearch(metaclass=ABCMeta):
         """
         requests original tweet from page of tweets searched
         """
-        print("find_geo")
+        # print("find_geo")
         try:
             # Specify a user agent to prevent Twitter from returning a profile card
             headers = {
