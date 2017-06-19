@@ -158,6 +158,8 @@ class TwitterSearch(metaclass=ABCMeta):
         """
         pulls user name from tweet currently being parsed, handles errors
         if not found
+        :param user_details_div: the html section for the given tweet
+        :return user_name: the user_name of the tweet's author
         """
         try:
             user_json = user_details_div['data-reply-to-users-json']
@@ -172,6 +174,9 @@ class TwitterSearch(metaclass=ABCMeta):
     def get_geo(req, tweet):
         """
         parses geo data from original tweet req, handles errors if not found
+        :param req: the request object of tweet being processed
+        :param tweet: the tweet json being filled
+        :return tweet: the tweet json being filled
         """
         try:
             geo_soup = BeautifulSoup(req.text, 'html.parser')
@@ -190,8 +195,9 @@ class TwitterSearch(metaclass=ABCMeta):
     def get_tweet(tweet):
         """
         requests original tweet from page of tweets searched
+        :param tweet: the tweet being processed and to extract data for url
+        :return req: the html request response of the tweet
         """
-        # print("find_geo")
         try:
             # Specify a user agent to prevent Twitter from returning a profile card
             headers = {
@@ -200,12 +206,9 @@ class TwitterSearch(metaclass=ABCMeta):
             }
             url = "https://twitter.com/" + tweet['user_id'] + '/status/' + tweet['tweet_id']
             req = requests.get(url, headers=headers)
-            # response = urllib2.urlopen(req)
-            # data = json.loads(req.text)
-            return req
 
-        # If we get a ValueError exception due to a request timing out, we sleep for our error delay, then make
-        # another attempt
+            return req
+        # Just give up if we couldn't retrieve :(
         except Exception as e:
             log.info('Could not retrieve original tweet, error: {}'.format(e))
 
@@ -309,9 +312,10 @@ class TwitterSlicer(TwitterSearch):
             if tweet['created_at'] is not None:
                 t = datetime.datetime.fromtimestamp((tweet['created_at']/1000))
                 fmt = "%Y-%m-%d %H:%M:%S"
-                log.info("%i [%s] - Tweet found, are you saving to file?" % (self.counter, t.strftime(fmt)))
+                log.info("{} [{}] - Tweet found, edit script to save".format(self.counter, t.strftime(fmt)))
+                # log.info("{} [{}] - Saving tweet: {}-{}.json".format(self.counter, t.strftime(fmt), t.strftime(fmt), tweet['tweet_id']))
                 # var = json.dumps(tweet)
-                # file_name = '/home/project/data/historical/allergies/{}-{}.json'.format(t.strftime(fmt), tweet['tweet_id'])
+                # file_name = '/home/spook/Desktop/test_data/{}-{}.json'.format(t.strftime(fmt), tweet['tweet_id'])
                 # f = open(file_name, 'w')
                 # f.writelines(var)
                 # f.close()
@@ -321,25 +325,41 @@ class TwitterSlicer(TwitterSearch):
 
 if __name__ == '__main__':
     log.basicConfig(level=log.INFO)
+    # terms to be searched, one by one and explicitly as typed below
+    terms = ['#ihaveacold', '#stayedhomefromwork', 'cough', '#cough',
+             '#imsick', 'dry throat', 'sore throat', '#sorethroat',
+             'stomach flu', 'lost my voice', 'tummy ache', 'runny nose',
+             'stuffy nose', 'stuffed nose', 'sore stomach', 'nasal congestion',
+             'stuffed nose', 'sick to my stomach', 'i am sick',
+             'i have a cold', 'im sick', 'ive got a cold', 'strep', 'nausea',
+             'strep throat']
 
-    # format MUST BE <any search words/query>[space]near:["][location]["][space]within:[distance]mi
-    # example: 'allergies near:"Kansas City, MO" within:1700mi'
-    search_query = 'bob'
     rate_delay_seconds = 0
     error_delay_seconds = 5
 
-    # Example of using TwitterSearch
-    # twit = TwitterSearchImpl(rate_delay_seconds, error_delay_seconds, None)
-    # twit.search(search_query)
+    # iterates through search terms and completes a search through time span
+    for term in terms:
+        # format MUST BE <any search words/query>[space]near:["][location]["][space]within:[distance]mi
+        # example: 'allergies near:"Kansas City, MO" within:1700mi'
+        if term[0] == "#":
+            search_query = '{} near:"Kansas City, MO" within:1700mi'.format(term)
+        else:
+            search_query = '"{}" near:"Kansas City, MO" within:1700mi'.format(term)
 
-    # Example of using TwitterSlice
-    select_tweets_since = datetime.datetime.strptime("2016-10-01", '%Y-%m-%d')
-    select_tweets_until = datetime.datetime.strptime("2016-10-05", '%Y-%m-%d')
-    threads = 10
+        rate_delay_seconds = 0
+        error_delay_seconds = 5
 
-    twitSlice = TwitterSlicer(rate_delay_seconds, error_delay_seconds, select_tweets_since, select_tweets_until,
-                              threads)
-    twitSlice.search(search_query)
+        # Example of using TwitterSearch
+        # twit = TwitterSearchImpl(rate_delay_seconds, error_delay_seconds, None)
+        # twit.search(search_query)
 
-    # print("TwitterSearch collected %i" % twit.counter)
-    print("TwitterSlicer collected %i" % twitSlice.counter)
+        # Example of using TwitterSlice
+        select_tweets_since = datetime.datetime.strptime("2016-10-01", '%Y-%m-%d')
+        select_tweets_until = datetime.datetime.strptime("2016-10-02", '%Y-%m-%d')
+        threads = 10
+
+        twitSlice = TwitterSlicer(rate_delay_seconds, error_delay_seconds, select_tweets_since, select_tweets_until,
+                                  threads)
+        twitSlice.search(search_query)
+        # print("TwitterSearch collected %i" % twit.counter)
+        print("TwitterSlicer collected %i" % twitSlice.counter)
