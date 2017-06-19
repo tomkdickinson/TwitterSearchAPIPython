@@ -85,16 +85,17 @@ class TwitterSearch(metaclass=ABCMeta):
             sleep(self.error_delay)
             return self.execute_search(url)
 
-    @staticmethod
-    def parse_tweets(items_html):
+    def parse_tweets(self, items_html):
         """
         Parses Tweets from the given HTML
         :param items_html: The HTML block with tweets
         :return: A JSON list of tweets
         """
+        # print("parse_tweets")
         soup = BeautifulSoup(items_html, "html.parser")
         tweets = []
         for li in soup.find_all("li", class_='js-stream-item'):
+            # print("parse_tweets main for loop")
 
             # If our li doesn't have a tweet-id, we skip it as it's not going to be a tweet.
             if 'data-item-id' not in li.attrs:
@@ -108,7 +109,9 @@ class TwitterSearch(metaclass=ABCMeta):
                 'user_name': None,
                 'created_at': None,
                 'retweets': 0,
-                'favorites': 0
+                'favorites': 0,
+                'geo_text': None,
+                'geo_search': None
             }
 
             # Tweet Text
@@ -116,12 +119,21 @@ class TwitterSearch(metaclass=ABCMeta):
             if text_p is not None:
                 tweet['text'] = text_p.get_text()
 
+            # print(tweet['text'])
+
             # Tweet User ID, User Screen Name, User Name
             user_details_div = li.find("div", class_="tweet")
             if user_details_div is not None:
                 tweet['user_id'] = user_details_div['data-user-id']
-                tweet['user_screen_name'] = user_details_div['data-user-id']
+                tweet['user_screen_name'] = self.get_user_name(user_details_div)
+
+                # tweet['user_screen_name'] = user_details_div['data-user-id']
                 tweet['user_name'] = user_details_div['data-name']
+
+            req = self.get_tweet(tweet)
+
+            if req is not None:
+                tweet = self.get_geo(req, tweet)
 
             # Tweet date
             date_span = li.find("span", class_="_timestamp")
@@ -140,6 +152,65 @@ class TwitterSearch(metaclass=ABCMeta):
 
             tweets.append(tweet)
         return tweets
+
+    @staticmethod
+    def get_user_name(user_details_div):
+        """
+        pulls user name from tweet currently being parsed, handles errors
+        if not found
+        :param user_details_div: the html section for the given tweet
+        :return user_name: the user_name of the tweet's author
+        """
+        try:
+            user_json = user_details_div['data-reply-to-users-json']
+            user_json = json.loads(user_json)
+            user_name = user_json[0]['screen_name'] 
+            return user_name
+        except Exception as e:
+            log.info("JSON could not be found for tweet.")
+            print(user_details_div)
+
+    @staticmethod
+    def get_geo(req, tweet):
+        """
+        parses geo data from original tweet req, handles errors if not found
+        :param req: the request object of tweet being processed
+        :param tweet: the tweet json being filled
+        :return tweet: the tweet json being filled
+        """
+        try:
+            geo_soup = BeautifulSoup(req.text, 'html.parser')
+            geo_data = geo_soup.find('span',
+                                     class_='permalink-tweet-geo-text')
+            geo_text = geo_data.text
+            geo_text = geo_text.replace('\n', '').replace('from', '').strip()
+            tweet['geo_text'] = geo_text
+            tweet['geo_search'] = geo_data.select("a")[0]['href']
+            return tweet
+        except Exception as e:
+            print("Could not find geo data, error: {}".format(e))
+            return tweet
+
+    @staticmethod
+    def get_tweet(tweet):
+        """
+        requests original tweet from page of tweets searched
+        :param tweet: the tweet being processed and to extract data for url
+        :return req: the html request response of the tweet
+        """
+        try:
+            # Specify a user agent to prevent Twitter from returning a profile card
+            headers = {
+                'user-agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/46.0.2490.'
+                              '86 Safari/537.36'
+            }
+            url = "https://twitter.com/" + tweet['user_id'] + '/status/' + tweet['tweet_id']
+            req = requests.get(url, headers=headers)
+
+            return req
+        # Just give up if we couldn't retrieve :(
+        except Exception as e:
+            log.info('Could not retrieve original tweet, error: {}'.format(e))
 
     @staticmethod
     def construct_url(query, max_position=None):
@@ -241,30 +312,54 @@ class TwitterSlicer(TwitterSearch):
             if tweet['created_at'] is not None:
                 t = datetime.datetime.fromtimestamp((tweet['created_at']/1000))
                 fmt = "%Y-%m-%d %H:%M:%S"
-                log.info("%i [%s] - %s" % (self.counter, t.strftime(fmt), tweet['text']))
+                log.info("{} [{}] - Tweet found, edit script to save".format(self.counter, t.strftime(fmt)))
+                # log.info("{} [{}] - Saving tweet: {}-{}.json".format(self.counter, t.strftime(fmt), t.strftime(fmt), tweet['tweet_id']))
+                # var = json.dumps(tweet)
+                # file_name = '/home/spook/Desktop/test_data/{}-{}.json'.format(t.strftime(fmt), tweet['tweet_id'])
+                # f = open(file_name, 'w')
+                # f.writelines(var)
+                # f.close()
 
         return True
 
 
 if __name__ == '__main__':
     log.basicConfig(level=log.INFO)
+    # terms to be searched, one by one and explicitly as typed below
+    terms = ['#ihaveacold', '#stayedhomefromwork', 'cough', '#cough',
+             '#imsick', 'dry throat', 'sore throat', '#sorethroat',
+             'stomach flu', 'lost my voice', 'tummy ache', 'runny nose',
+             'stuffy nose', 'stuffed nose', 'sore stomach', 'nasal congestion',
+             'stuffed nose', 'sick to my stomach', 'i am sick',
+             'i have a cold', 'im sick', 'ive got a cold', 'strep', 'nausea',
+             'strep throat']
 
-    search_query = "Babylon 5"
     rate_delay_seconds = 0
     error_delay_seconds = 5
 
-    # Example of using TwitterSearch
-    twit = TwitterSearchImpl(rate_delay_seconds, error_delay_seconds, None)
-    twit.search(search_query)
+    # iterates through search terms and completes a search through time span
+    for term in terms:
+        # format MUST BE <any search words/query>[space]near:["][location]["][space]within:[distance]mi
+        # example: 'allergies near:"Kansas City, MO" within:1700mi'
+        if term[0] == "#":
+            search_query = '{} near:"Kansas City, MO" within:1700mi'.format(term)
+        else:
+            search_query = '"{}" near:"Kansas City, MO" within:1700mi'.format(term)
 
-    # Example of using TwitterSlice
-    select_tweets_since = datetime.datetime.strptime("2016-10-01", '%Y-%m-%d')
-    select_tweets_until = datetime.datetime.strptime("2016-12-01", '%Y-%m-%d')
-    threads = 10
+        rate_delay_seconds = 0
+        error_delay_seconds = 5
 
-    twitSlice = TwitterSlicer(rate_delay_seconds, error_delay_seconds, select_tweets_since, select_tweets_until,
-                              threads)
-    twitSlice.search(search_query)
+        # Example of using TwitterSearch
+        # twit = TwitterSearchImpl(rate_delay_seconds, error_delay_seconds, None)
+        # twit.search(search_query)
 
-    print("TwitterSearch collected %i" % twit.counter)
-    print("TwitterSlicer collected %i" % twitSlice.counter)
+        # Example of using TwitterSlice
+        select_tweets_since = datetime.datetime.strptime("2016-10-01", '%Y-%m-%d')
+        select_tweets_until = datetime.datetime.strptime("2016-10-02", '%Y-%m-%d')
+        threads = 10
+
+        twitSlice = TwitterSlicer(rate_delay_seconds, error_delay_seconds, select_tweets_since, select_tweets_until,
+                                  threads)
+        twitSlice.search(search_query)
+        # print("TwitterSearch collected %i" % twit.counter)
+        print("TwitterSlicer collected %i" % twitSlice.counter)
