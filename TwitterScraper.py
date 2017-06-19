@@ -125,22 +125,15 @@ class TwitterSearch(metaclass=ABCMeta):
             user_details_div = li.find("div", class_="tweet")
             if user_details_div is not None:
                 tweet['user_id'] = user_details_div['data-user-id']
-                tweet['user_screen_name'] = user_details_div['data-user-id']
+                tweet['user_screen_name'] = self.get_user_name(user_details_div)
+
+                # tweet['user_screen_name'] = user_details_div['data-user-id']
                 tweet['user_name'] = user_details_div['data-name']
 
-            data = self.find_geo(tweet)
+            req = self.get_tweet(tweet)
 
-            if data is not None:
-                try:
-                    geo_soup = BeautifulSoup(data.text, 'html.parser')
-                    geo_data = geo_soup.find('span',
-                                             class_='permalink-tweet-geo-text')
-                    geo_text = geo_data.text
-                    geo_text = geo_text.replace('\n', '').replace('from', '').strip()
-                    tweet['geo_text'] = geo_text
-                    tweet['geo_search'] = geo_data.select("a")[0]['href']
-                except Exception as e:
-                    print(e)
+            if req is not None:
+                tweet = self.get_geo(req, tweet)
 
             # Tweet date
             date_span = li.find("span", class_="_timestamp")
@@ -161,7 +154,40 @@ class TwitterSearch(metaclass=ABCMeta):
         return tweets
 
     @staticmethod
-    def find_geo(tweet):
+    def get_user_name(user_details_div):
+        """
+        pulls user name from tweet currently being parsed, handles errors
+        if not found
+        """
+        try:
+            user_json = user_details_div['data-reply-to-users-json']
+            user_json = json.loads(user_json)
+            user_name = user_json[0]['screen_name'] 
+            return user_name
+        except Exception as e:
+            log.info("JSON could not be found for tweet.")
+            print(user_details_div)
+
+    @staticmethod
+    def get_geo(req, tweet):
+        """
+        parses geo data from original tweet req, handles errors if not found
+        """
+        try:
+            geo_soup = BeautifulSoup(req.text, 'html.parser')
+            geo_data = geo_soup.find('span',
+                                     class_='permalink-tweet-geo-text')
+            geo_text = geo_data.text
+            geo_text = geo_text.replace('\n', '').replace('from', '').strip()
+            tweet['geo_text'] = geo_text
+            tweet['geo_search'] = geo_data.select("a")[0]['href']
+            return tweet
+        except Exception as e:
+            print("Could not find geo data, error: {}".format(e))
+            return tweet
+
+    @staticmethod
+    def get_tweet(tweet):
         """
         requests original tweet from page of tweets searched
         """
@@ -181,7 +207,7 @@ class TwitterSearch(metaclass=ABCMeta):
         # If we get a ValueError exception due to a request timing out, we sleep for our error delay, then make
         # another attempt
         except Exception as e:
-            print(e)
+            log.info('Could not retrieve original tweet, error: {}'.format(e))
 
     @staticmethod
     def construct_url(query, max_position=None):
@@ -298,7 +324,7 @@ if __name__ == '__main__':
 
     # format MUST BE <any search words/query>[space]near:["][location]["][space]within:[distance]mi
     # example: 'allergies near:"Kansas City, MO" within:1700mi'
-    search_query = ''
+    search_query = 'bob'
     rate_delay_seconds = 0
     error_delay_seconds = 5
 
@@ -308,7 +334,7 @@ if __name__ == '__main__':
 
     # Example of using TwitterSlice
     select_tweets_since = datetime.datetime.strptime("2016-10-01", '%Y-%m-%d')
-    select_tweets_until = datetime.datetime.strptime("2016-10-02", '%Y-%m-%d')
+    select_tweets_until = datetime.datetime.strptime("2016-10-05", '%Y-%m-%d')
     threads = 10
 
     twitSlice = TwitterSlicer(rate_delay_seconds, error_delay_seconds, select_tweets_since, select_tweets_until,
