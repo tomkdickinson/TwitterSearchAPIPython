@@ -283,7 +283,12 @@ class TwitterSlicer(TwitterSearch):
             if tweet['created_at'] is not None:
                 t = datetime.datetime.fromtimestamp((tweet['created_at']/1000))
                 fmt = "%Y-%m-%d %H:%M:%S"
-                log.info("%i [%s] - local:%s" % (self.counter, t.strftime(fmt), tweet['geo_text']))
+                log.info("%i [%s] - Tweet found, are you saving to file?" % (self.counter, t.strftime(fmt)))
+                # var = json.dumps(tweet)
+                # file_name = '/home/project/data/allergies/{}-{}.json'.format(t.strftime(fmt), tweet['tweet_id'])
+                # f = open(file_name, 'w')
+                # f.writelines(var)
+                # f.close()
 
         return True
 
@@ -292,7 +297,8 @@ if __name__ == '__main__':
     log.basicConfig(level=log.INFO)
 
     # format MUST BE <any search words/query>[space]near:["][location]["][space]within:[distance]mi
-    search_query = 'allergies near:"Kansas City, MO" within:1700mi'
+    # example: 'allergies near:"Kansas City, MO" within:1700mi'
+    search_query = ''
     rate_delay_seconds = 0
     error_delay_seconds = 5
 
@@ -302,7 +308,7 @@ if __name__ == '__main__':
 
     # Example of using TwitterSlice
     select_tweets_since = datetime.datetime.strptime("2016-10-01", '%Y-%m-%d')
-    select_tweets_until = datetime.datetime.strptime("2017-10-02", '%Y-%m-%d')
+    select_tweets_until = datetime.datetime.strptime("2016-10-02", '%Y-%m-%d')
     threads = 10
 
     twitSlice = TwitterSlicer(rate_delay_seconds, error_delay_seconds, select_tweets_since, select_tweets_until,
