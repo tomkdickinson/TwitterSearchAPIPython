@@ -285,7 +285,7 @@ class TwitterSlicer(TwitterSearch):
                 fmt = "%Y-%m-%d %H:%M:%S"
                 log.info("%i [%s] - Tweet found, are you saving to file?" % (self.counter, t.strftime(fmt)))
                 # var = json.dumps(tweet)
-                # file_name = '/home/project/data/allergies/{}-{}.json'.format(t.strftime(fmt), tweet['tweet_id'])
+                # file_name = '/home/project/data/historical/allergies/{}-{}.json'.format(t.strftime(fmt), tweet['tweet_id'])
                 # f = open(file_name, 'w')
                 # f.writelines(var)
                 # f.close()
